@@ -1,27 +1,6 @@
+import random
 from transformations import *
 from scipy.stats import expon
-
-
-def add_noise_to_rows(array, noise_level):
-    """
-    Apply noise to each row of a NumPy array.
-
-    Parameters:
-    - array: NumPy array where each row represents a data point.
-    - noise_level: Magnitude of noise to apply to each row.
-
-    Returns:
-    - noisy_array: NumPy array with noise added to each row.
-    """
-    # Determine the shape of the input array
-    num_rows, num_cols = array.shape
-
-    # Generate noise for each row
-    noise = np.random.normal(scale=noise_level, size=(num_rows, num_cols))
-
-    # Add noise to each row
-    noisy_array = array + noise
-    return noisy_array
 
 
 def generate_waypath(params):
@@ -32,19 +11,20 @@ def generate_waypath(params):
 
     Returns:
     - new_waypaths: List of returned waypaths between the way-points.
-    - new_waypts:  List of returned way-points
+    - new_waypoints:  List of returned way-points
     """
     # Sample number of way-points
-    n_points = np.random.poisson(lam=params["waypts_lambda_offset"]) + params["min_waypts"]
+    min_pt, max_pt = params["waypoints_range"]
+    n_points = random.randint(min_pt, max_pt)
 
     # Chance to be planar increases with number of way points
     prob_coplanar, coplanar_dim = expon.cdf(n_points - 2, scale=params["coplanar_scale"]), -1
-    if np.random.uniform() < prob_coplanar: coplanar_dim = np.random.randint(0, 3)
+    if np.random.uniform() < prob_coplanar: coplanar_dim = random.randint(0, 2)
     use_screw = False
     if n_points == 2 and np.random.uniform() > params["screw_prob"]: use_screw = True
 
     # Select way-points position change
-    distances = np.random.uniform(0, params["max_obj_scale"], size=n_points)
+    distances = np.random.uniform(0, params["obj_waypoint_bound"], size=n_points)
     way_point_pos = random_unit_vectors_3d(n_points) * np.expand_dims(distances, -1)
     if coplanar_dim > -1: way_point_pos[:, coplanar_dim] = 0
 
@@ -56,19 +36,18 @@ def generate_waypath(params):
         way_point_ori.append(random_start)
 
     # Generate waypaths
-    new_waypts = np.concatenate([way_point_pos, way_point_ori], axis=-1)
+    new_waypoints = np.concatenate([way_point_pos, way_point_ori], axis=-1)
     [lower_radius, upper_radius] = params["arc_radius_range"]
-    wp_params = {'log_arc_radius_range': [np.log(lower_radius), np.log(upper_radius)],
-                 'tilt_deg': params["arc_tilt_deg"],
-                 'radius_noise': params["arc_radius_noise"], 'tilt_noise': params["arc_tilt_noise"]}
     new_waypaths = []
     for i in range(n_points - 1):
         # Generate between points
-        pt1, pt2 = new_waypts[i], new_waypts[i + 1]
+        pt1, pt2 = new_waypoints[i], new_waypoints[i + 1]
         dir_vector = pt2[:3] - pt1[:3]
-        interval_steps = np.random.randint(params["min_steps"], params["max_steps"])
+        interval_steps = np.random.randint(*params["step_range"])
         if use_screw: interval_steps *= params["screw_step_mult"]
-        wpath = ArcWayPath(wp_params, interval_steps)
+        wpath = ArcWayPath(log_radius_range=[np.log(lower_radius), np.log(upper_radius)], tilt_radian_range=params["arc_tilt_radian"],
+                           radius_noise=params["arc_radius_noise"], tilt_noise=params["arc_tilt_noise"],
+                           steps=interval_steps)
         wpath.sample_params()
         sampled_pos = wpath.draw(pt2[:3], pt1[:3])
         sampled_ori = apply_screw(pt1[3:], dir_vector, interval_steps) if use_screw else quaternion_slerp(pt1[3:],
@@ -77,41 +56,51 @@ def generate_waypath(params):
         if coplanar_dim > -1: sampled_pos[:, coplanar_dim] = 0
         way_path_seg = np.concatenate([sampled_pos, sampled_ori], axis=-1)
         new_waypaths.append(way_path_seg)
-    return new_waypaths, new_waypts
+    return new_waypaths, new_waypoints
 
 
 class ArcWayPath():
     '''
-    Initializes, samples and generates arc-like waypaths.
+    Defines and samples arc way-path properties.
 
     Attributes:
         steps (int): controls the timestep resolution of the arc sampled.
         arc_radius_mean (float): mean of the arc radius around which new waypaths are sampled.
-        tilt_deg_mean (float): mean of the arc tilt degree around which new waypaths are sampled.
+        tilt_radian_mean (float): mean of the arc tilt radian around which new waypaths are sampled.
         arc_radius_noise (float): sampling noise for arc radius.
-        tilt_noise (float): sampling noise for arc tilt degree.
+        tilt_noise (float): sampling noise for arc tilt radian.
 
     Methods:
-        sample_params(): sample new parameters based on initial parameter and a degree of noise.
+        sample_params(): sample new parameters based on initial parameter and noise.
         draw(start_point, end_point): draw an arc connecting the two given way-points.
     '''
 
-    def __init__(self, params, steps):
-        self.params = params
+    def __init__(self, log_radius_range, tilt_radian_range, radius_noise, tilt_noise, steps):
+        '''
+        Initializes arc properties.
+
+        Params:
+        - log_radius_range ([float, float]): a range of logarithmic arc radius to be sampled from.
+        - tilt_radian_range (float): a range of possible tilt angles to be sampled from.
+        - radius_noise (float): sampling noise for arc radius.
+        - tilt_noise (float): sampling noise for arc tilt.
+        - steps (int): the arc timestep resolution.
+
+        Methods:
+            sample_params(): sample new parameters based on initial parameter and noise parameter.
+            draw(start_point, end_point): draw an arc connecting the two given way-points.
+        '''
         self.steps = steps
-        self.arc_radius_mean = np.exp(np.random.uniform(*self.params["log_arc_radius_range"]))
-        self.tilt_deg_mean = np.random.uniform(*self.params["tilt_deg"])
-        self.arc_radius_noise = self.params["radius_noise"]
-        self.tilt_noise = self.params["tilt_noise"]
+        self.arc_radius_mean = np.exp(np.random.uniform(*log_radius_range))
+        self.tilt_radian_mean = np.random.uniform(*tilt_radian_range)
+        self.arc_radius_noise = radius_noise
+        self.tilt_noise = tilt_noise
         self.sample_params()
 
     def sample_params(self):
-        """
-        Sample new arc parameters based on initial parameter and a degree of noise.
-        """
         # Trajectory property randomization
-        self.arc_radius = np.random.normal(self.arc_radius_mean, self.arc_radius_noise)
-        self.tilt_deg = np.random.normal(self.tilt_deg_mean, self.tilt_noise)
+        self.arc_radius = max(0.5, np.random.normal(self.arc_radius_mean, self.arc_radius_noise))
+        self.tilt_rad = np.random.normal(self.tilt_radian_mean, self.tilt_noise)
 
     def draw(self, start_point, end_point):
         """
@@ -123,10 +112,11 @@ class ArcWayPath():
         - points_on_arc: array of 3D points on arc
         """
         x_axis, y_axis, z_axis = pairwise_constrained_axis3d(start_point, end_point, up_axis=2)
-        rot = R.from_rotvec(x_axis * self.tilt_deg)
+        rot = R.from_rotvec(x_axis * self.tilt_rad)
         new_y_axis, new_z_axis = rot.apply(y_axis), rot.apply(z_axis)
         direction_vector = end_point - start_point
         direction_norm = np.linalg.norm(direction_vector)
+
         # Generate points along the arc
         deg = max(0, np.arcsin(1 / (2 * self.arc_radius)))
         t = np.linspace(np.pi / 2 - deg, np.pi / 2 + deg, self.steps)
@@ -142,8 +132,4 @@ class ArcWayPath():
         return points_on_arc
 
 
-class Object3D:
-    def __init__(self, size, waypaths, waypoints):
-        self.size = size
-        self.waypaths = waypaths
-        self.waypoints = waypoints
+

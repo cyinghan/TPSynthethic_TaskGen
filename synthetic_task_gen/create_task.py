@@ -1,5 +1,4 @@
 import torch
-import random
 import matplotlib.pyplot as plt
 from create_waypath import *
 from scipy.interpolate import CubicSpline
@@ -150,16 +149,14 @@ def generate_task(params, paired_ref_prob_func=generate_pairing_target):
     Returns:
     - task_info: a dictionary of the randomly generated task parameters.
     """
-    task_info = {}
-    task_info["start_point"] = params["start_point"]
-    task_info["num_objs"] = np.random.randint(params["min_objs"], params["max_objs"] + 1)
-    task_info.update({"object_list": [], "transit_trajs": [],
-                      "pairwise_frame_target": paired_ref_prob_func(task_info["num_objs"])})
+    task_info = {"start_point": params["start_point"], "object_list": [], "transit_trajs": [],
+                 "num_objs": random.randint(*params["obj_num_range"])}
+    task_info["pairwise_frame_target"] = paired_ref_prob_func(task_info["num_objs"])
     task_info.update(params)
     for i in range(task_info["num_objs"]):
         waypath_out, waypt_out = generate_waypath(task_info)
-        obj = Object3D(task_info["max_obj_scale"], waypath_out, waypt_out)
-        transit_len = np.random.randint(task_info["min_steps"], task_info["max_steps"])
+        obj = Object3D(task_info["obj_waypoint_bound"], waypath_out, waypt_out)
+        transit_len = np.random.randint(*task_info["step_range"])
         task_info["object_list"].append(obj)
         task_info["transit_trajs"].append(transit_len)
     return task_info
@@ -232,8 +229,8 @@ def display_trajectory(trajectories, obj_position):
     for traj in trajectories:
         ax.plot(traj[:, 0], traj[:, 1], traj[:, 2], **line_config)
     for i, pos in enumerate(obj_position):
-        ax.scatter(pos[0, 0], pos[0, 1], pos[0, 2], marker="x", color='red')
-        ax.scatter(pos[1:, 0], pos[1:, 1], pos[1:, 2], marker="o", color='red')
+        ax.scatter(pos[0, 0], pos[0, 1], pos[0, 2], marker="x", color="red", label="start point")
+        ax.scatter(pos[1:, 0], pos[1:, 1], pos[1:, 2], marker="o", color="red", label="object center")
     ax.set_xlabel('X')
     ax.set_ylabel('Y')
     ax.set_zlabel('Z')
@@ -265,3 +262,10 @@ def draw_3d_axes(ax, origin, rot_mat, length=1.0):
     # Z axis
     ax.quiver(ox, oy, oz, length * rot_mat[2][0], length * rot_mat[2][1], length * rot_mat[2][2], color='b',
               label='Z axis')
+
+
+class Object3D:
+    def __init__(self, size, waypaths, waypoints):
+        self.size = size
+        self.waypaths = waypaths
+        self.waypoints = waypoints
