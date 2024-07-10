@@ -1,0 +1,9 @@
+# Ignore workspace files
+.idea/
+
+# Ignore Python bytecode files
+*.pyc
+__pycache__/
+
+# Ignore saved task files
+*.pkl
