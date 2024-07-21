@@ -38,3 +38,6 @@ generator = TaskGenerator(sample_params, UNIQUE_OBJS, n_tasks=tsize)
 # Generate demonstration samples
 generated_samples = generator.sample_demos(NUM_DEMOS)
 ```
+
+## License
+This project is licensed under the MIT License - see the LICENSE.md file for details
