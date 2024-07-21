@@ -65,7 +65,7 @@ def create_tags(objs):
     """
     Create a dictionary of one-hot vectors for a list of unique objects.
     """
-    one_hots = torch.eye(len(objs))
+    one_hots = np.eye(len(objs))
     tag_dict = {}
     for i, obj in enumerate(objs):
         tag_dict[obj] = one_hots[i]
@@ -144,6 +144,19 @@ def generate_task(params, paired_ref_prob_func=generate_pairing_target):
 
     Parameters:
     - params: dictionary of the distribution parameters for task generation
+        - 'waypoints_range' (list of int): a range for uniformly sampling the number of way-points per object.
+        - 'step_range' (list of int): step range use for uniformly sampling the number of steps per way-path.
+        - 'obj_num_range' (list of int): range for uniformly sampling the number of object per task.
+        - 'obj_waypoint_bound' (float): max distance the way-points can be from the object center.
+        - 'coplanar_scale' (float): scale parameter controlling whether coplanar way-paths should be generated depending on the number of way-points.
+        - 'keep_ori_prob' (float): controls if orientation between way-points is maintained.
+        - 'screw_prob' (float): controls if screwing motion is performed for a way-path with 2 way-points.
+        - 'screw_step_mult' (int): multipler for the sampled screwing motion steps as longer timestep is require to have a detailed resolution of the motion.
+        - 'arc_radius_range' (float): mean of the arc radius around which new waypaths are sampled.
+        - 'arc_tilt_radian' (float): mean of the arc tilt radian around which new waypaths are sampled.
+        - 'arc_radius_noise' (float): sampling noise for arc radius.
+        - 'arc_tilt_noise' (float): sampling noise for arc tilt radian.
+        - 'start_point' (array): the provided starting pose for end-effector.
     - paired_ref_prob_func: a function that randomly determines if the reference frame is paired wise or not
 
     Returns:
@@ -188,7 +201,7 @@ class TaskGenerator(object):
 
     def sample_demos(self, num_demos):
         """
-        Generate task dataset based on provided parameters.
+        Generate task dataset (including trajectory, object, and task information) based on the provided parameters.
         """
         # Load all task data and create data test/training splits
         task_datasets = {}
@@ -202,12 +215,12 @@ class TaskGenerator(object):
                 obj_poses = np.concatenate([obj_centers, local_rots], axis=-1)
                 obj_poses = np.vstack([task_info["start_point"], obj_poses])
                 obj_buffer = np.zeros([traj_len, self.n_object])
-                task_buffer = self.task_tags[tname].repeat([traj_len, 1])
+                task_buffer = np.tile(self.task_tags[tname], [traj_len, 1])
                 smooth_quaternions(traj[:, 3:])
                 new_traj_data = np.concatenate([traj, obj_buffer, task_buffer], axis=1)
                 obj_count = obj_poses.shape[0]
                 obj_tag_addon = np.array([self.obj_tags[self.objects[i]] for i in range(obj_count)])
-                obj_task_addon = self.task_tags[tname].repeat([obj_count, 1])
+                obj_task_addon = np.tile(self.task_tags[tname], [obj_count, 1])
                 new_obj_seq = np.concatenate([obj_poses, obj_tag_addon, obj_task_addon], axis=-1)
                 all_obj_seqs.append(new_obj_seq)
                 all_traj_seqs.append(new_traj_data)
