@@ -25,14 +25,14 @@ from synthetic_task_gen.create_task import *
 NUM_DEMOS = 10
 UNIQUE_OBJS = ["obj0", "obj1", "obj2"]
 
-# Plot individual randomized waypath
+# Define task generation parameters
 sample_params = {"waypoints_range":[2, 5], "obj_waypoint_bound": 150, "coplanar_scale": 2,
                  "keep_ori_prob": 0.6, "screw_prob": 0.4, "screw_step_mult": 2, "step_range": [15, 30],
                  "obj_num_range": [1, 2], "arc_radius_range": [0.8, 150], 'arc_tilt_radian': [-np.pi, np.pi],
                  "arc_radius_noise": 0.001, 'arc_tilt_noise': 0.001, 
                  "start_point": [-400, -400, 100, 0, 0, 0, 1]}
                  
-# Generate tasks using the provided task parameters
+# Generate unique tasks using the provided parameters
 generator = TaskGenerator(sample_params, UNIQUE_OBJS, n_tasks=tsize)
 
 # Generate demonstration samples
