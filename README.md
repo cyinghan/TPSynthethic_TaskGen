@@ -19,7 +19,7 @@ The task parameters for TaskGenerator is required to control the charactoristic 
 * <ins>arc_tilt_noise</ins>: sampling noise for arc tilt radian.
 * <ins>start_point</ins>: the provided starting pose for end-effector.
 
-```
+```python
 from synthetic_task_gen.create_task import *
 
 NUM_DEMOS = 10
